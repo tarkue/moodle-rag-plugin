@@ -3,7 +3,7 @@ namespace local_rag;
 defined('MOODLE_INTERNAL') || die();
 
 final class synchronizer {
-    public static function resource(int $cmid): void {
+    public static function resource(int $cmid) {
         global $DB;
         configuration::require_enabled();
         $factory = \core\lock\lock_config::get_lock_factory('local_rag');
@@ -18,7 +18,7 @@ final class synchronizer {
             $lock->release();
         }
     }
-    private static function discover(int $cmid): void {
+    private static function discover(int $cmid) {
         global $DB;
         $seen = [];
         foreach (content_catalog::scope($cmid) as $candidate) {
@@ -32,7 +32,7 @@ final class synchronizer {
             }
         }
     }
-    private static function remember(\stdClass $candidate): void {
+    private static function remember(\stdClass $candidate) {
         global $DB;
         $record = $DB->get_record('local_rag_documents', ['docid' => $candidate->docid]);
         if ($record && $record->contenthash === $candidate->contenthash &&
@@ -52,7 +52,7 @@ final class synchronizer {
         }
         $DB->insert_record('local_rag_documents', $candidate);
     }
-    private static function process(int $cmid): void {
+    private static function process(int $cmid) {
         global $DB;
         $records = $DB->get_records_select('local_rag_documents',
             "cmid = :cmid AND status <> 'indexed' AND nextattempt <= :now", ['cmid' => $cmid, 'now' => time()]);
@@ -60,7 +60,7 @@ final class synchronizer {
             self::transfer($record);
         }
     }
-    private static function transfer(\stdClass $record): void {
+    private static function transfer(\stdClass $record) {
         global $DB;
         configuration::require_enabled();
         try {
@@ -77,7 +77,7 @@ final class synchronizer {
                 return;
             }
             if ((int)$record->fileid === 0) {
-                $metadata = json_decode($current->metadata, true, 512, JSON_THROW_ON_ERROR);
+                $metadata = json_codec::decode($current->metadata);
                 $client->upload_native($record, $metadata['text']);
             } else {
                 $client->upload($record, get_file_storage()->get_file_by_id($current->fileid));
@@ -102,7 +102,7 @@ final class synchronizer {
         $record->timemodified = time();
         $DB->update_record('local_rag_documents', $record);
     }
-    public static function retry(): void {
+    public static function retry() {
         global $DB;
         configuration::require_enabled();
         $cmids = $DB->get_fieldset_select('local_rag_documents', 'DISTINCT cmid',
@@ -111,12 +111,12 @@ final class synchronizer {
             self::resource((int)$cmid);
         }
     }
-    public static function reconcile(): void {
+    public static function reconcile() {
         global $DB;
         configuration::require_enabled();
         $cmids = $DB->get_fieldset_sql("SELECT cm.id FROM {course_modules} cm JOIN {modules} m ON m.id = cm.module
             WHERE m.name IN ('resource', 'folder', 'data', 'page', 'book', 'label')");
-        $courses = array_map(static fn($id) => -(int)$id, $DB->get_fieldset_select('course', 'id', '1 = 1'));
+        $courses = array_map(static function($id) { return -(int)$id; }, $DB->get_fieldset_select('course', 'id', '1 = 1'));
         $cmids = array_merge($cmids, $courses);
         $known = $DB->get_fieldset_select('local_rag_documents', 'DISTINCT cmid', '1 = 1');
         foreach (array_unique(array_merge($cmids, $known)) as $cmid) {

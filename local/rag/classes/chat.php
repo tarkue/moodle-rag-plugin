@@ -29,7 +29,7 @@ final class chat {
             if (!isset($allowed[$id]) || ($url = access::source_url($allowed[$id])) === '') {
                 throw new \moodle_exception('serviceerror', 'local_rag', '', 502);
             }
-            $sources[] = ['doc_id' => $id, 'doc' => $allowed[$id]->title, 'url' => $url,
+            $sources[] = ['doc_id' => $id, 'contenthash' => $allowed[$id]->contenthash, 'doc' => $allowed[$id]->title, 'url' => $url,
                 'page' => (int)($source['page'] ?? 0), 'fragment' => (string)($source['fragment'] ?? '')];
         }
         return ['answer' => (string)($response['answer'] ?? ''), 'sources' => $sources];

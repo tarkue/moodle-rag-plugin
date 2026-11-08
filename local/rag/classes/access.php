@@ -23,13 +23,27 @@ final class access {
             is_enrolled($context, $USER, '', true) || has_capability('moodle/course:view', $context));
     }
     public static function can_read_module(int $courseid, int $cmid): bool {
+        global $CFG;
         $modinfo = get_fast_modinfo($courseid);
         if (!isset($modinfo->cms[$cmid])) {
             return false;
         }
         $cm = $modinfo->get_cm($cmid);
-        return in_array($cm->modname, content_catalog::MODULES, true) && $cm->uservisible &&
-            has_capability($cm->modname === 'data' ? 'mod/data:viewentry' : ($cm->modname === 'book' ? 'mod/book:read' : 'mod/' . $cm->modname . ':view'), \context_module::instance($cmid));
+        if (!in_array($cm->modname, content_catalog::MODULES, true) || !$cm->uservisible) {
+            return false;
+        }
+        // Labels were inline course content before Moodle 3.2 introduced this capability.
+        if ($cm->modname === 'label' && !get_capability_info('mod/label:view')) {
+            if (!in_array((int)$CFG->branch, [30, 31], true)) {
+                return false;
+            }
+            $course = get_course($courseid);
+            return self::can_use_course($courseid) && ($course->visible ||
+                has_capability('moodle/course:viewhiddencourses', \context_course::instance($courseid)));
+        }
+        return has_capability($cm->modname === 'data' ? 'mod/data:viewentry' :
+            ($cm->modname === 'book' ? 'mod/book:read' : 'mod/' . $cm->modname . ':view'),
+            \context_module::instance($cmid));
     }
     public static function allowed_documents(int $courseid): array {
         global $DB;
@@ -74,8 +88,7 @@ final class access {
         }
         $data = $DB->get_record('data', ['id' => $cm->instance], '*', MUST_EXIST);
         $canmanage = has_capability('mod/data:manageentries', $context);
-        [$available] = data_get_time_availability_status($data, $canmanage);
-        if (!$available) {
+        if (!self::database_available($data, $canmanage)) {
             return false;
         }
         if ($entry->userid != $USER->id && ((!empty($data->timeviewfrom) && time() < $data->timeviewfrom) ||
@@ -95,13 +108,27 @@ final class access {
         }
         return true;
     }
+    /** Match native Database viewing bounds before its 3.3 helper existed. */
+    private static function database_available(\stdClass $data, bool $canmanage): bool {
+        if (function_exists('data_get_time_availability_status')) {
+            $status = data_get_time_availability_status($data, $canmanage);
+            return (bool)$status[0];
+        }
+        if ($canmanage) {
+            return true;
+        }
+        $now = time();
+        return (empty($data->timeavailablefrom) || $data->timeavailablefrom <= $now) &&
+            (empty($data->timeavailableto) || $now <= $data->timeavailableto);
+    }
+
     private static function can_read_native(\stdClass $record): bool {
         global $CFG, $DB;
         if (!self::can_use_course((int)$record->courseid) || !($current = content_catalog::current($record)) ||
                 $current->contenthash !== $record->contenthash) {
             return false;
         }
-        $metadata = json_decode($current->metadata, true, 512, JSON_THROW_ON_ERROR);
+        $metadata = json_codec::decode($current->metadata);
         $source = $metadata['source'];
         if ((int)$record->cmid > 0) {
             if (!self::can_read_module((int)$record->courseid, (int)$record->cmid)) {
@@ -154,7 +181,7 @@ final class access {
             if (!$current || !self::can_read_document($record)) {
                 return '';
             }
-            $metadata = json_decode($current->metadata, true, 512, JSON_THROW_ON_ERROR);
+            $metadata = json_codec::decode($current->metadata);
             return (new \moodle_url($metadata['url']))->out(false);
         }
         $file = self::file($record);

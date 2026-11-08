@@ -5,7 +5,7 @@ final class retry_documents extends \core\task\scheduled_task {
     public function get_name(): string {
         return get_string('retrytask', 'local_rag');
     }
-    public function execute(): void {
+    public function execute() {
         if (\local_rag\configuration::enabled()) {
             \local_rag\synchronizer::retry();
         }

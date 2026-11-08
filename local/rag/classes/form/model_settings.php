@@ -4,7 +4,7 @@ defined('MOODLE_INTERNAL') || die();
 global $CFG;
 require_once($CFG->libdir . '/formslib.php');
 final class model_settings extends \moodleform {
-    public const FIELDS = ['LLM_PROVIDER', 'OLLAMA_BASE_URL', 'OLLAMA_MODEL', 'OPENROUTER_MODEL',
+    const FIELDS = ['LLM_PROVIDER', 'OLLAMA_BASE_URL', 'OLLAMA_MODEL', 'OPENROUTER_MODEL',
         'TOP_K', 'SEARCH_MODE', 'CHUNK_STRATEGY', 'PDF_PARSER', 'CHUNK_SIZE', 'CHUNK_OVERLAP', 'RAG_PROMPT'];
     public function definition() {
         $form = $this->_form;

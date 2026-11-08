@@ -23,7 +23,7 @@ final class configuration {
         }
         return $url;
     }
-    public static function require_enabled(): void {
+    public static function require_enabled() {
         if (!self::enabled()) {
             throw new \moodle_exception('unavailable', 'local_rag');
         }

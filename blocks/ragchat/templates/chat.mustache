@@ -8,7 +8,7 @@
     <button type="button" class="rag-chat__launcher" data-action="toggle" aria-controls="rag-chat-panel" aria-expanded="false" aria-label="Открыть виртуального ассистента">
         {{#pix}} ai, block_ragchat {{/pix}}
     </button>
-    <aside id="rag-chat-panel" class="rag-chat__panel" aria-labelledby="rag-chat-title" hidden>
+    <aside id="rag-chat-panel" class="rag-chat__panel" data-dock-hint="{{#str}}dockhint, block_ragchat{{/str}}" aria-labelledby="rag-chat-title" hidden>
         <header class="rag-chat__header" data-drag-header>
             <span class="rag-chat__spark" aria-hidden="true">{{#pix}} ai, block_ragchat {{/pix}}</span>
             <div class="rag-chat__heading"><h2 id="rag-chat-title">Виртуальный ассистент</h2><p>AI-помощник</p></div>
@@ -17,6 +17,7 @@
             <button type="button" class="rag-chat__icon" data-action="close" aria-label="Закрыть чат">{{#pix}} cross, block_ragchat {{/pix}}</button>
         </header>
         <div class="rag-chat__conversation" data-role="conversation">
+            <div class="rag-chat__message-area">
             <div class="rag-chat__messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="История диалога" tabindex="0">
                 <p class="rag-chat__date" data-role="date"></p>
                 <div class="rag-chat__message rag-chat__message--assistant">
@@ -26,6 +27,7 @@
                 </div>
             </div>
             <button type="button" class="rag-chat__latest" data-action="latest" hidden>К последнему ответу ↓</button>
+            </div>
             <p class="rag-chat__status sr-only" data-role="status" role="status" aria-live="polite"></p>
             <form class="rag-chat__form" novalidate>
                 <label class="sr-only" for="rag-chat-query">Вопрос по базе знаний</label>

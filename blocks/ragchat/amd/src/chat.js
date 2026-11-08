@@ -2,7 +2,7 @@
  * Accessible Moodle-session chat. Service credentials never enter this module.
  * @module block_ragchat/chat
  */
-define(['block_ragchat/markdown'], function(Markdown) {
+define(['block_ragchat/markdown', 'block_ragchat/history'], function(Markdown, History) {
     'use strict';
 
     const queryError = (query, limit) => {
@@ -88,6 +88,14 @@ define(['block_ragchat/markdown'], function(Markdown) {
         if (!safeUrl) { return null; }
         return new URL(safeUrl).origin === new URL(base).origin ? safeUrl : null;
     };
+    const rateLimitMessage = async response => {
+        try {
+            const result = await response.json();
+            if (result && result.error === 'ratelimited' && typeof result.message === 'string' &&
+                    result.message.trim() && result.message.length <= 300) { return result.message.trim(); }
+        } catch (failure) { /* Malformed responses retain the safe local fallback. */ }
+        return '';
+    };
     const element = (tag, className, text) => {
         const node = document.createElement(tag);
         node.className = className;
@@ -131,6 +139,18 @@ define(['block_ragchat/markdown'], function(Markdown) {
         const maxLength = Number(config.maxLength) || 4000;
         let controller = null;
         let restoreFocus = null;
+        const historyScope = {origin: window.location.origin, sitepath: new URL('../../', endpoint).pathname,
+            userid: config.userid, courseid: config.courseid};
+        let historyStorage = null;
+        try { historyStorage = window.localStorage; } catch (storageError) { /* Private browsing can deny storage. */ }
+        let historyTurns = History.load(historyStorage, historyScope);
+        let historyGeneration = 0;
+        let historyRequest = null;
+        const clearHistory = element('button', 'rag-chat__copy', 'Очистить историю на этом устройстве');
+        clearHistory.type = 'button';
+        clearHistory.dataset.action = 'clear-history';
+        clearHistory.hidden = !historyTurns.length;
+        root.querySelector('[data-role=date]').after(clearHistory);
         const userMenu = document.querySelector('#carousel-item-main');
         const menuToggle = element('button', 'dropdown-item', 'Виртуальный ассистент');
         menuToggle.type = 'button';
@@ -139,9 +159,18 @@ define(['block_ragchat/markdown'], function(Markdown) {
         menuToggle.setAttribute('tabindex', '-1');
         menuToggle.setAttribute('aria-controls', 'rag-chat-panel');
         if (userMenu) { userMenu.append(menuToggle); }
-        root.querySelector('[data-role=date]').textContent = new Intl.DateTimeFormat('ru', {
-            day: 'numeric', month: 'long'
-        }).format(new Date());
+        const dateLabel = instant => new Intl.DateTimeFormat('ru', {
+            day: 'numeric', month: 'long', year: 'numeric'
+        }).format(new Date(instant));
+        let messageDay = dateLabel(historyTurns.length ? historyTurns[0].askedAt : new Date());
+        root.querySelector('[data-role=date]').textContent = messageDay;
+        const ensureMessageDay = instant => {
+            const day = dateLabel(instant);
+            if (day !== messageDay) {
+                messages.append(element('p', 'rag-chat__date', day));
+                messageDay = day;
+            }
+        };
         const greetingTime = root.querySelector('[data-role=greeting-time]');
         if (greetingTime) { greetingTime.append(messageTime(new Date().toISOString())); }
 
@@ -256,13 +285,21 @@ define(['block_ragchat/markdown'], function(Markdown) {
             if (nearLatest()) { unread = false; }
             latest.hidden = !unread || nearLatest();
         };
-        const scrollToLatest = () => { messages.scrollTop = messages.scrollHeight; unread = false; updateLatest(); };
+        const scrollToLatest = (animate = false) => {
+            const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (animate && typeof messages.scrollTo === 'function') {
+                messages.scrollTo({top: messages.scrollHeight, behavior: reduced ? 'auto' : 'smooth'});
+            } else { messages.scrollTop = messages.scrollHeight; }
+            unread = false;
+            updateLatest();
+        };
         messages.addEventListener('scroll', updateLatest);
         const setBusy = busy => {
             submit.hidden = busy;
             stop.hidden = !busy;
             root.querySelectorAll('[data-action=regenerate]').forEach(button => { button.disabled = busy; });
             input.readOnly = busy;
+            clearHistory.disabled = busy;
             messages.setAttribute('aria-busy', String(busy));
             validate();
             growInput();
@@ -299,18 +336,19 @@ define(['block_ragchat/markdown'], function(Markdown) {
             }
             if (persist) { preference(visible); }
         };
-        const appendMessage = (text, kind) => {
+        const appendMessage = (text, kind, follow = true) => {
             const article = element('article', 'rag-chat__message rag-chat__message--' + kind);
             article.append(element('span', 'sr-only', kind === 'user' ? 'Вы: ' : 'Ассистент: '));
             article.append(element('p', 'rag-chat__text', text));
             article.dataset.createdAt = new Date().toISOString();
             if (text) { article.append(messageTime(article.dataset.createdAt)); }
             messages.append(article);
-            scrollToLatest();
+            if (follow) { scrollToLatest(); }
             return article;
         };
         const icon = name => {
-            const original = root.querySelector('[data-icon=' + name + '] .icon');
+            const holder = root.querySelector('[data-icon=' + name + ']');
+            const original = holder && holder.querySelector('.icon, .smallicon');
             const result = original ? original.cloneNode(true) : element('span', '',
                 name === 'copy' ? '' : (name === 'book' ? '▤' : '↻'));
             result.setAttribute('aria-hidden', 'true');
@@ -384,14 +422,68 @@ define(['block_ragchat/markdown'], function(Markdown) {
             retryButton.addEventListener('click', () => ask(query, article));
             article.append(retryButton);
         };
+        const restoreHistory = async () => {
+            const generation = historyGeneration;
+            // Reserve chronological positions before any asynchronous validation or new question.
+            const pending = historyTurns.map(record => {
+                ensureMessageDay(record.askedAt);
+                const user = appendMessage(record.question, 'user');
+                user.dataset.createdAt = record.askedAt;
+                user.querySelector('time').replaceWith(messageTime(record.askedAt));
+                const article = appendMessage('Проверяю сохранённый ответ…', 'assistant');
+                return {record, article};
+            });
+            const refs = new Map();
+            historyTurns.forEach(record => record.sources.forEach(source =>
+                refs.set(source.doc_id + ':' + source.contenthash, {doc_id: source.doc_id, contenthash: source.contenthash})));
+            let allowed = [];
+            let limited = false;
+            let limitedMessage = '';
+            const url = proxyUrl(config.historyendpoint, window.location.href);
+            if (refs.size && url) {
+                historyRequest = new AbortController();
+                const timeout = window.setTimeout(() => historyRequest && historyRequest.abort(), 10000);
+                try {
+                    const response = await fetch(url, {method: 'POST', credentials: 'same-origin',
+                        signal: historyRequest.signal, headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+                        body: JSON.stringify({sesskey: config.sesskey, courseid: config.courseid, sources: Array.from(refs.values())})});
+                    limited = response.status === 429;
+                    if (limited) { limitedMessage = await rateLimitMessage(response); }
+                    if (response.ok) {
+                        const result = await response.json();
+                        if (Array.isArray(result.sources) && result.sources.length <= 100) { allowed = result.sources; }
+                    }
+                } catch (failure) { /* Offline, expired sessions and denied ACLs never expose cached sources. */ }
+                finally { window.clearTimeout(timeout); historyRequest = null; }
+            }
+            if (generation !== historyGeneration) { return; }
+            pending.forEach(({record, article}) => {
+                const restored = History.rehydrate(record, allowed, historyScope.origin);
+                if (!restored) {
+                    article.replaceChildren(element('p', 'rag-chat__time', limited ? limitedMessage ||
+                        'Сохранённый ответ временно недоступен. Повторите открытие страницы позже.' :
+                        'Сохранённый ответ недоступен: доступ к материалам не подтверждён.'));
+                    return;
+                }
+                renderAnswer(article, restored.answer, 'assistant', restored.sources, restored.question);
+                article.dataset.answeredAt = record.at;
+                article.querySelector('time').replaceWith(messageTime(record.at));
+                // Stored Markdown links are untrusted. Only fresh canonical source links remain actionable.
+                article.querySelectorAll('.rag-chat__text a').forEach(link => link.replaceWith(document.createTextNode(link.textContent)));
+                article.append(element('span', 'rag-chat__time', 'Сохранено на этом устройстве'));
+            });
+            scrollToLatest();
+        };
         const ask = async (query, retryArticle = null) => {
             if (controller) { return; }
             if (!query.trim()) { attempted = false; validate(); return; }
             if (queryError(query, maxLength)) { attempted = true; validate(); return; }
             const question = query.trim();
             let followResponse = true;
-            if (!retryArticle) { appendMessage(question, 'user'); }
-            const answer = retryArticle || appendMessage('', 'assistant');
+            if (!retryArticle) { ensureMessageDay(new Date()); }
+            const userArticle = !retryArticle ? appendMessage(question, 'user', false) : null;
+            const answer = retryArticle || appendMessage('', 'assistant', false);
+            answer.dataset.questionAt = userArticle ? userArticle.dataset.createdAt : answer.dataset.questionAt;
             answer.className = 'rag-chat__message rag-chat__message--assistant rag-chat__message--pending';
             const pending = element('p', 'rag-chat__text', 'Генерирую ответ');
             const dots = element('span', 'rag-chat__loading-dots', '…');
@@ -404,6 +496,7 @@ define(['block_ragchat/markdown'], function(Markdown) {
             controller = request;
             status.textContent = 'Генерирую ответ…';
             setBusy(true);
+            if (!retryArticle) { scrollToLatest(true); }
             try {
                 const response = await fetch(endpoint, {
                     method: 'POST', credentials: 'same-origin', signal: request.signal,
@@ -411,6 +504,10 @@ define(['block_ragchat/markdown'], function(Markdown) {
                     body: JSON.stringify({query: question, courseid: config.courseid, sesskey: config.sesskey})
                 });
                 if (!response.ok) {
+                    if (response.status === 429) {
+                        const message = await rateLimitMessage(response);
+                        if (message) { throw new Error(message); }
+                    }
                     const failures = {401: 'Сессия истекла. Войдите в Moodle снова.',
                         403: 'Нет доступа к ассистенту или материалам этого курса.',
                         413: 'Вопрос слишком длинный. Сократите его и повторите.',
@@ -425,6 +522,11 @@ define(['block_ragchat/markdown'], function(Markdown) {
                 if (request.signal.aborted) { throw new DOMException('Stopped', 'AbortError'); }
                 followResponse = sourceScreen.hidden && nearLatest();
                 renderAnswer(answer, result.answer, 'assistant', result.sources, question);
+                historyTurns = History.save(historyStorage, historyScope, historyTurns.concat([{
+                    question, answer: result.answer, at: answer.dataset.answeredAt, askedAt: answer.dataset.questionAt,
+                    sources: Array.isArray(result.sources) ? result.sources : []
+                }]));
+                clearHistory.hidden = !historyTurns.length;
             } catch (failure) {
                 const text = failure.name === 'AbortError' ? 'Получение ответа остановлено.' :
                     (failure instanceof TypeError ? 'Нет связи с сервисом. Проверьте подключение и повторите запрос.' : failure.message);
@@ -458,6 +560,21 @@ define(['block_ragchat/markdown'], function(Markdown) {
             if (action === 'stop' && controller) { controller.abort(); }
             if (action === 'latest') { scrollToLatest(); messages.focus({preventScroll: true}); }
             if (action === 'back') { closeSources(); }
+            if (action === 'clear-history' && !controller) {
+                historyGeneration++;
+                if (historyRequest) { historyRequest.abort(); }
+                historyTurns = [];
+                History.clear(historyStorage, historyScope);
+                closeSources(false);
+                messages.querySelectorAll('.rag-chat__message[data-created-at]').forEach(article => article.remove());
+                messages.querySelectorAll('.rag-chat__date:not([data-role=date])').forEach(separator => separator.remove());
+                messageDay = dateLabel(new Date());
+                root.querySelector('[data-role=date]').textContent = messageDay;
+                clearHistory.hidden = true;
+                status.textContent = 'История на этом устройстве очищена.';
+                input.focus({preventScroll: true});
+                scrollToLatest();
+            }
             if (action === 'minimize' && viewport().width > 767) { fullscreen(false); }
             if (action === 'fullscreen' && viewport().width > 767) { fullscreen(true); }
         });
@@ -548,6 +665,7 @@ define(['block_ragchat/markdown'], function(Markdown) {
         fullscreen(false);
         validate();
         show(Boolean(config.enabledpreference), false, false);
+        if (historyTurns.length) { restoreHistory(); }
     };
     return {init, queryError, validationState, sourceCountLabel, composerSize, safeSourceUrl, proxyUrl,
         clampGeometry, defaultGeometry, dockGeometry, resizeGeometry, createWindowState, setFullscreen};

@@ -18,8 +18,8 @@ final class native_document {
                 $node->appendChild($document->createTextNode("\n"));
             }
             $text = str_replace("\xc2\xa0", ' ', $document->textContent);
-            $lines = array_map(static fn($line) => trim(preg_replace('/[\t\r ]+/u', ' ', $line)), explode("\n", $text));
-            return implode("\n", array_values(array_filter($lines, static fn($line) => $line !== '')));
+            $lines = array_map(static function($line) { return trim(preg_replace('/[\t\r ]+/u', ' ', $line)); }, explode("\n", $text));
+            return implode("\n", array_values(array_filter($lines, static function($line) { return $line !== ''; })));
         } finally {
             libxml_clear_errors();
             libxml_use_internal_errors($previous);

@@ -4,7 +4,7 @@ defined('MOODLE_INTERNAL') || die();
 
 /** Explicit adapters for course-authored content, never a general file/table crawler. */
 final class content_catalog {
-    public const MODULES = ['resource', 'folder', 'data', 'page', 'book', 'label'];
+    const MODULES = ['resource', 'folder', 'data', 'page', 'book', 'label'];
 
     public static function scope(int $scope): array {
         global $DB;
@@ -90,7 +90,7 @@ final class content_catalog {
         return !$position || (bool)$position->visible;
     }
 
-    private static function html(array &$items, \stdClass $cm, array $source, string $title, string $html, string $url): void {
+    private static function html(array &$items, \stdClass $cm, array $source, string $title, string $html, string $url) {
         $text = native_document::text($html);
         if ($text === '') {
             return;
@@ -100,10 +100,10 @@ final class content_catalog {
         $metadata = ['source' => $source, 'url' => $url, 'text' => $text, 'author' => '', 'keywords' => []];
         $items[$docid] = (object)['docid' => $docid, 'courseid' => $cm->course, 'cmid' => $cm->id,
             'fileid' => 0, 'contenthash' => sha1($text), 'title' => \core_text::substr(strip_tags($title), 0, 255),
-            'metadata' => json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)];
+            'metadata' => json_codec::encode($metadata, JSON_UNESCAPED_UNICODE)];
     }
 
-    private static function files(array &$items, \stdClass $cm, int $contextid, string $component, string $area, $itemid, array $source): void {
+    private static function files(array &$items, \stdClass $cm, int $contextid, string $component, string $area, $itemid, array $source) {
         global $DB;
         foreach (get_file_storage()->get_area_files($contextid, $component, $area, $itemid, 'id', false) as $file) {
             if (!in_array(strtolower(pathinfo($file->get_filename(), PATHINFO_EXTENSION)), ['pdf', 'docx', 'pptx'], true)) {
@@ -129,7 +129,7 @@ final class content_catalog {
             $items[$docid] = (object)['docid' => $docid, 'courseid' => $cm->course, 'cmid' => $cm->id,
                 'fileid' => $file->get_id(), 'contenthash' => $file->get_contenthash(),
                 'title' => \core_text::substr($metadata['title'], 0, 255),
-                'metadata' => json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)];
+                'metadata' => json_codec::encode($metadata, JSON_UNESCAPED_UNICODE)];
         }
     }
 

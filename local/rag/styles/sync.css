@@ -1,0 +1,50 @@
+/* Loaded only by the authenticated manual-sync page; preserve the selected theme. */
+body#page-local-rag-sync #page.drawers .main-inner {
+    width: 100%;
+    max-width: 60rem;
+    margin-left: auto;
+    margin-right: auto;
+}
+body#page-local-rag-sync .main-inner #page-header {
+    padding-left: 0;
+    padding-right: 0;
+    width: auto;
+    max-width: none;
+    margin-left: 0;
+    margin-right: 0;
+}
+body#page-local-rag-sync .secondary-navigation .navigation,
+body#page-local-rag-sync .secondary-navigation .moremenu {
+    max-width: none;
+    margin-left: 0;
+    margin-right: 0;
+}
+body#page-local-rag-sync .local-rag-sync {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 60rem;
+    margin-left: auto;
+    margin-right: auto;
+    overflow-wrap: anywhere;
+}
+body#page-local-rag-sync .local-rag-sync .generaltable {
+    width: 100%;
+    max-width: 100%;
+}
+body#page-local-rag-sync .local-rag-sync :is(.singlebutton, form, button, input[type=submit]) {
+    max-width: 100%;
+}
+body#page-local-rag-sync .local-rag-sync :is(button, input[type=submit]) {
+    white-space: normal;
+}
+
+body#page-local-rag-sync #region-main [role=main] {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* Klass adds a second horizontal inset inside the already aligned page content. */
+body#page-local-rag-sync #region-main {
+    padding-left: 0;
+    padding-right: 0;
+}

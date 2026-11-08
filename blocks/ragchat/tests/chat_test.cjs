@@ -3,6 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 let chat;
+let history;
+vm.runInNewContext(fs.readFileSync(__dirname + '/../amd/src/history.js', 'utf8'), {
+    define: (_, factory) => { history = factory(); }, URL,
+});
 vm.runInNewContext(fs.readFileSync(__dirname + '/../amd/src/chat.js', 'utf8'), {
     define: (dependencies, factory) => { chat = factory(); }, URL,
 });
@@ -105,6 +109,13 @@ const harness = (responses = [], withVisualViewport = false) => {
             node.parent = this; this.children.push(node);
         }); }
         replaceChildren(...nodes) { this.ownText = ''; this.children = []; this.append(...nodes); }
+        cloneNode(deep = false) {
+            const clone = new Node(this.tagName); clone.className = this.className;
+            clone.dataset = {...this.dataset}; clone.attributes = {...this.attributes}; clone.ownText = this.ownText;
+            if (deep) { clone.append(...this.children.map(child => child.cloneNode(true))); }
+            return clone;
+        }
+        after(node) { node.parent = this.parent; this.parent.children.splice(this.parent.children.indexOf(this) + 1, 0, node); }
         setAttribute(name, value) { this.attributes[name] = value; }
         removeAttribute(name) { delete this.attributes[name]; }
         addEventListener(type, listener) { (this.events[type] ||= []).push(listener); }
@@ -130,6 +141,9 @@ const harness = (responses = [], withVisualViewport = false) => {
             return this.parent ? this.parent.closest(selector) : null;
         }
         querySelectorAll(selector) {
+            const prototypeIcon = selector.match(/^\[data-icon=([^\]]+)\] \.(icon|smallicon)$/);
+            if (prototypeIcon) { return this.querySelectorAll('[data-icon=' + prototypeIcon[1] + ']')
+                .flatMap(holder => holder.querySelectorAll('.' + prototypeIcon[2])); }
             return this.children.flatMap(child => [
                 ...(selector.split(',').some(item => child.matches(item.trim())) ? [child] : []),
                 ...child.querySelectorAll(selector)
@@ -178,7 +192,7 @@ const harness = (responses = [], withVisualViewport = false) => {
     });
     let module;
     vm.runInNewContext(fs.readFileSync(__dirname + '/../amd/src/chat.js', 'utf8'), {
-        define: (_, factory) => { module = factory(markdown); }, URL, document, window, AbortController, DOMException,
+        define: (_, factory) => { module = factory(markdown, history); }, URL, document, window, AbortController, DOMException,
         fetch: async (url, options) => {
             requests.push(JSON.parse(options.body));
             const response = responses.shift();
@@ -633,4 +647,47 @@ test('chat icons keep a useful glyph area and decorative copy template without c
     }
     const template = fs.readFileSync(__dirname + '/../templates/chat.mustache', 'utf8');
     assert.match(template, /data-icon="copy" hidden aria-hidden="true"/);
+});
+
+test('explicit valid send scrolls the message log smoothly while invalid submit does not move it', () => {
+    const h = harness([{ok: true, json: async () => ({answer: 'Ответ'})}]);
+    const calls=[];
+    h.window.matchMedia=()=>({matches:false});
+    h.messages.scrollTo=options=>{calls.push(options);h.messages.scrollTop=options.top;};
+    h.messages.scrollTop=123;h.input.value='x';h.form.dispatch('submit');
+    assert.equal(calls.length,0);assert.equal(h.messages.scrollTop,123);
+    h.input.value='Valid user question';h.form.dispatch('submit');
+    assert.equal(calls.length,1);assert.equal(calls[0].behavior,'smooth');assert.equal(calls[0].top,h.messages.scrollHeight);
+});
+
+test('explicit send respects reduced motion and only scrolls the inner message log', () => {
+    const h = harness([{ok: true, json: async () => ({answer: 'Ответ'})}]);
+    const calls=[];h.window.matchMedia=()=>({matches:true});
+    h.messages.scrollTo=options=>{calls.push(options);h.messages.scrollTop=options.top;};
+    h.input.value='Reduced motion question';h.form.dispatch('submit');
+    assert.equal(calls[0].behavior,'auto');
+});
+
+test('429 shows a bounded Moodle rate-limit message as plain text without an automatic retry', async () => {
+    const message='Слишком много запросов. Повторите через 27 секунд. <img src=x onerror=bad>';
+    const h=harness([{ok:false,status:429,json:async()=>({error:'ratelimited',message})}]);
+    h.input.value='Rate limited user question';h.form.dispatch('submit');await h.settle();
+    const error=h.messages.querySelector('.rag-chat__message--error');
+    assert.ok(error.textContent.includes(message));assert.equal(error.querySelector('img'),null);
+    await h.settle();assert.equal(h.requests.length,1);
+});
+
+test('429 ignores oversized or unrelated upstream message payloads', async () => {
+    for(const payload of [{error:'ratelimited',message:'x'.repeat(301)},{error:'serviceerror',message:'Untrusted upstream details'}]){
+        const h=harness([{ok:false,status:429,json:async()=>payload}]);h.input.value='Rate fallback question';h.form.dispatch('submit');await h.settle();
+        const error=h.messages.querySelector('.rag-chat__message--error');assert.ok(error.textContent.includes('Слишком много запросов.'));assert.ok(!error.textContent.includes(payload.message));
+    }
+});
+
+for(const iconClass of ['icon','smallicon'])test('generated copy source and retry clone '+iconClass+' image prototypes',async()=>{
+ const h=harness([{ok:true,json:async()=>({answer:'Answer [S1]',sources:[{doc:'Source',fragment:'Excerpt'}]})},{ok:false,status:503}]);
+ for(const name of ['copy','book','repeat']){const holder=h.document.createElement('span');holder.dataset.icon=name;const img=h.document.createElement('img');img.className=iconClass;img.setAttribute('src',name+'.svg');holder.append(img);h.root.append(holder);}
+ h.input.value='First source question';h.form.dispatch('submit');await h.settle();const answer=h.messages.children.at(-1);
+ for(const [selector,expected]of [['.rag-chat__sources','book.svg'],['[data-action=copy-answer]','copy.svg']]){const image=answer.querySelector(selector).children[0];assert.equal(image.tagName,'img');assert.equal(image.attributes.src,expected);assert.equal(image.attributes['aria-hidden'],'true');}
+ h.input.value='Second error question';h.form.dispatch('submit');await h.settle();const retry=h.messages.children.at(-1).querySelector('[data-action=regenerate]').children[0];assert.equal(retry.tagName,'img');assert.equal(retry.attributes.src,'repeat.svg');
 });

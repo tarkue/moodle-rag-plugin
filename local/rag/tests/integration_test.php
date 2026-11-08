@@ -152,7 +152,8 @@ final class integration_test extends \advanced_testcase {
         observer::resource_changed($event);
         observer::resource_changed($event);
         $queued = array_filter($DB->get_records('task_adhoc'), static function($task) {
-            return strpos($task->classname, 'local_rag') !== false;
+            // Course creation may independently queue a course-content task.
+            return $task->classname === '\\local_rag\\task\\sync_resource';
         });
         $this->assertCount(1, $queued);
         $task = reset($queued);

@@ -3,7 +3,7 @@ namespace local_rag;
 defined('MOODLE_INTERNAL') || die();
 
 final class service_client {
-    public function request(string $method, string $path, ?array $payload = null, bool $admin = false): array {
+    public function request(string $method, string $path, array $payload = null, bool $admin = false): array {
         configuration::require_enabled();
         $headers = ['Accept: application/json', 'X-Service-Token: ' . configuration::token()];
         if ($admin) {
@@ -12,7 +12,7 @@ final class service_client {
         $body = null;
         if ($payload !== null) {
             $headers[] = 'Content-Type: application/json';
-            $body = json_encode($payload, JSON_THROW_ON_ERROR);
+            $body = json_codec::encode($payload);
         }
         return $this->execute($method, $path, $headers, $body);
     }
