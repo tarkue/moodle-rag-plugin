@@ -1,0 +1,31 @@
+{{! Native Boost footer integration with the supplied INZHE visual identity. }}
+<footer id="page-footer" class="inzhe-footer bg-white">
+    <div class="inzhe-footer__main">
+        <a class="inzhe-footer__brand" href="{{{config.homeurl}}}" aria-label="ИНЖЭК — главная">{{#pix}}logo, theme_inzhe, ИНЖЭК — научно-образовательный центр{{/pix}}</a>
+        <nav class="inzhe-footer__links" aria-label="{{#str}}partners, theme_inzhe{{/str}}">
+            <a href="https://center.mind-pro.ru/">НОЦ «ИНЖЭК»</a>
+            <a href="https://urfu.ru/">УрФУ</a>
+        </nav>
+        <address class="inzhe-footer__contact">
+            <p><span aria-hidden="true"><svg width="26" height="28" viewBox="0 0 24 28" fill="currentColor" aria-hidden="true"><path d="M12 1a8 8 0 0 0-8 8c0 6 8 16 8 16s8-10 8-16a8 8 0 0 0-8-8zm0 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/></svg></span>Екатеринбург, ул. Гоголя, 25</p>
+            <p><span aria-hidden="true">☎</span><a href="tel:+79122676282">+7 (912) 267-62-82</a></p>
+            <p><span aria-hidden="true">✉</span><a href="mailto:m.v.kozhevnikov@urfu.ru">m.v.kozhevnikov@urfu.ru</a></p>
+        </address>
+    </div>
+    <div class="inzhe-footer__bottom">
+        <p>НОЦ «ИНЖЭК» · {{#str}}poweredbymoodle, core{{/str}}</p>
+        <details class="inzhe-footer__support">
+            <summary>{{#str}}sitesupport, theme_inzhe{{/str}}</summary>
+            {{{ output.page_doc_link }}}
+            {{{ output.supportemail }}}
+            <div class="logininfo">{{{ output.login_info }}}</div>
+            <div class="tool_usertours-resettourcontainer"></div>
+        </details>
+    </div>
+    {{{ output.standard_footer_html }}}
+    {{{ output.standard_end_of_body_html }}}
+    <div class="footer-content-debugging">{{{ output.debug_footer_html }}}</div>
+</footer>
+{{#js}}
+require(['theme_inzhe/catalogue'], function(Catalogue) { Catalogue.init(); });
+{{/js}}

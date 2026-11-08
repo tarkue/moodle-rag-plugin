@@ -1,0 +1,62 @@
+{{!
+    @template block_ragchat/chat
+    The server must omit this template entirely when the service is unconfigured.
+    Context: enabled (boolean). Bootstrap is passed only to AMD, never interpolated into HTML.
+}}
+{{#enabled}}
+<div id="rag-chat" class="rag-chat" data-rag-chat>
+    <button type="button" class="rag-chat__launcher" data-action="toggle" aria-controls="rag-chat-panel" aria-expanded="false" aria-label="Открыть виртуального ассистента">
+        {{#pix}} ai, block_ragchat {{/pix}}
+    </button>
+    <aside id="rag-chat-panel" class="rag-chat__panel" aria-labelledby="rag-chat-title" hidden>
+        <header class="rag-chat__header" data-drag-header>
+            <span class="rag-chat__spark" aria-hidden="true">{{#pix}} ai, block_ragchat {{/pix}}</span>
+            <div class="rag-chat__heading"><h2 id="rag-chat-title">Виртуальный ассистент</h2><p>AI-помощник</p></div>
+            <button type="button" class="rag-chat__icon" data-action="minimize" aria-label="Выйти из полноэкранного режима" hidden>{{#pix}} minimize, block_ragchat {{/pix}}</button>
+            <button type="button" class="rag-chat__icon" data-action="fullscreen" aria-label="Развернуть на весь экран" aria-pressed="false">{{#pix}} maximize, block_ragchat {{/pix}}</button>
+            <button type="button" class="rag-chat__icon" data-action="close" aria-label="Закрыть чат">{{#pix}} cross, block_ragchat {{/pix}}</button>
+        </header>
+        <div class="rag-chat__conversation" data-role="conversation">
+            <div class="rag-chat__messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="История диалога" tabindex="0">
+                <p class="rag-chat__date" data-role="date"></p>
+                <div class="rag-chat__message rag-chat__message--assistant">
+                    <p>Привет! Я — виртуальный ассистент.</p>
+                    <p>Ты можешь задать мне любой вопрос, и я отвечу, опираясь на базу знаний.</p>
+                    <span data-role="greeting-time"></span>
+                </div>
+            </div>
+            <button type="button" class="rag-chat__latest" data-action="latest" hidden>К последнему ответу ↓</button>
+            <p class="rag-chat__status sr-only" data-role="status" role="status" aria-live="polite"></p>
+            <form class="rag-chat__form" novalidate>
+                <label class="sr-only" for="rag-chat-query">Вопрос по базе знаний</label>
+                <div class="rag-chat__input-wrap">
+                    <textarea id="rag-chat-query" rows="2" wrap="soft" placeholder="Напишите вопрос" aria-describedby="rag-chat-error rag-chat-count"></textarea>
+                    <div class="rag-chat__controls">
+                        <button type="submit" class="rag-chat__send" aria-label="Отправить вопрос">{{#pix}} arrow-up, block_ragchat {{/pix}}</button>
+                        <button type="button" class="rag-chat__send" data-action="stop" aria-label="Остановить получение ответа" hidden>{{#pix}} stop, block_ragchat {{/pix}}</button>
+                    </div>
+                </div>
+                <p id="rag-chat-error" class="rag-chat__error" role="alert" hidden></p>
+                <p id="rag-chat-count" class="rag-chat__count" data-role="count" hidden></p>
+            </form>
+        </div>
+        <section class="rag-chat__source-screen" data-role="sources" aria-labelledby="rag-chat-sources-title" hidden>
+            <header class="rag-chat__header" data-drag-header>
+                <span data-icon="book" aria-hidden="true">{{#pix}} book, block_ragchat {{/pix}}</span>
+                <h2 id="rag-chat-sources-title" class="rag-chat__source-title">Источники ответа</h2>
+                <button type="button" class="rag-chat__icon" data-action="back" aria-label="Закрыть источники и вернуться в чат">{{#pix}} cross, block_ragchat {{/pix}}</button>
+            </header>
+            <div class="rag-chat__source-content" data-role="source-content" tabindex="0"></div>
+        </section>
+        <span data-icon="repeat" hidden>{{#pix}} repeat, block_ragchat {{/pix}}</span>
+        <span class="rag-chat__resize" data-resize="n" aria-hidden="true"></span>
+        <span class="rag-chat__resize" data-resize="e" aria-hidden="true"></span>
+        <span class="rag-chat__resize" data-resize="s" aria-hidden="true"></span>
+        <span class="rag-chat__resize" data-resize="w" aria-hidden="true"></span>
+        <span class="rag-chat__resize" data-resize="ne" aria-hidden="true"></span>
+        <span class="rag-chat__resize" data-resize="nw" aria-hidden="true"></span>
+        <span class="rag-chat__resize" data-resize="se" aria-hidden="true"></span>
+        <span class="rag-chat__resize" data-resize="sw" aria-hidden="true"></span>
+    </aside>
+</div>
+{{/enabled}}

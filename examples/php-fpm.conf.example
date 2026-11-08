@@ -1,0 +1,5 @@
+; Add to the PHP-FPM pool config; inherit actual values from your service manager.
+; Do not place tokens in public webroot or browser-side configuration.
+env[RAG_SERVICE_URL] = $RAG_SERVICE_URL
+env[RAG_SERVICE_TOKEN] = $RAG_SERVICE_TOKEN
+env[RAG_ADMIN_TOKEN] = $RAG_ADMIN_TOKEN
