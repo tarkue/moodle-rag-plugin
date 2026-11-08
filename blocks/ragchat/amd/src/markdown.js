@@ -69,9 +69,9 @@ define([], function() {
 
     /**
      * Render without attaching to the document. Oversized/over-budget content becomes plain text.
-     * @param {String} text Markdown source (citations such as (S1) stay ordinary text).
-     * @param {Object} options document, baseUrl, copyLabel (all optional in a browser).
-     * @returns {Object} {fragment, codeBlocks: [{button, code, text}], limited}
+     * @param {String} text Markdown source.
+     * @param {Object} options document, baseUrl, copyLabel, sourceCount (optional; no citations by default).
+     * @returns {Object} {fragment, codeBlocks: [{button, code, text}], citations: [{button, index}], limited}
      */
     const render = (text, options = {}) => {
         const doc = options.document || document;
@@ -79,6 +79,8 @@ define([], function() {
         const baseUrl = options.baseUrl || doc.baseURI;
         const fragment = doc.createDocumentFragment();
         const codeBlocks = [];
+        const citations = [];
+        const sourceCount = Number.isSafeInteger(options.sourceCount) ? options.sourceCount : 0;
         let limited = false;
         let nodeCount = 0;
         let work = MAX_INPUT * 20;
@@ -101,7 +103,7 @@ define([], function() {
             const found = value.slice(start, end).indexOf(delimiter);
             return found >= 0 ? start + found : -1;
         };
-        const inline = (parent, value, depth = 0) => {
+        const inline = (parent, value, depth = 0, allowCitations = true) => {
             let index = 0;
             let pending = '';
             const flush = () => { if (pending) { plain(parent, pending); pending = ''; } };
@@ -111,11 +113,30 @@ define([], function() {
                 if (char === '\\' && /[\\`*_[\]{}()#+.!|>~-]/.test(value[index + 1] || '')) {
                     pending += value[index + 1]; index += 2; continue;
                 }
+                const citation = allowCitations && (char === '[' || char === '(') &&
+                    value.slice(index, index + 16).match(/^(?:\[S([1-9]\d*)\]|\(S([1-9]\d*)\))/);
+                if (citation && Number(citation[1] || citation[2]) <= sourceCount &&
+                        !/[\[(]/.test(value[index - 1] || ' ') &&
+                        !/[\])]/.test(value[index + citation[0].length] || ' ') &&
+                        !(char === '[' && value[index + citation[0].length] === '(') &&
+                        !/(?:https?:\/\/|www\.)\S*$/i.test(value.slice(Math.max(0, index - LOOKAHEAD), index))) {
+                    flush();
+                    const sourceIndex = Number(citation[1] || citation[2]) - 1;
+                    const button = node('button', citation[0]);
+                    button.type = 'button';
+                    button.className = 'rag-chat__citation';
+                    button.dataset.action = 'citation';
+                    button.setAttribute('aria-label', 'Открыть источник S' + (sourceIndex + 1));
+                    citations.push({button, index: sourceIndex});
+                    parent.append(button);
+                    index += citation[0].length; continue;
+                }
                 const image = char === '!' && value[index + 1] === '[';
                 if (char === '[' || image) {
                     const start = index + (image ? 2 : 1);
                     const labelEnd = find(value, '](', start);
-                    const urlEnd = labelEnd >= 0 ? find(value, ')', labelEnd + 2) : -1;
+                    const urlEnd = labelEnd >= 0 && !value.slice(start, labelEnd).includes('[') ?
+                        find(value, ')', labelEnd + 2) : -1;
                     if (urlEnd >= 0) {
                         const label = value.slice(start, labelEnd);
                         const destination = value.slice(labelEnd + 2, urlEnd);
@@ -126,7 +147,7 @@ define([], function() {
                             const link = node('a');
                             link.setAttribute('href', target.href);
                             if (target.external) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
-                            inline(link, label, depth + 1);
+                            inline(link, label, depth + 1, false);
                             parent.append(link);
                         }
                         index = urlEnd + 1; continue;
@@ -146,7 +167,7 @@ define([], function() {
                         const child = node(tag);
                         const content = value.slice(index + delimiter.length, end);
                         if (tag === 'code') { child.textContent = content; }
-                        if (tag !== 'code') { inline(child, content, depth + 1); }
+                        if (tag !== 'code') { inline(child, content, depth + 1, allowCitations); }
                         parent.append(child);
                         index = end + delimiter.length; continue;
                     }
@@ -279,7 +300,7 @@ define([], function() {
         } else {
             blocks(fragment, source.replace(/\r\n?/g, '\n').split('\n'));
         }
-        return {fragment, codeBlocks, limited};
+        return {fragment, codeBlocks, citations, limited};
     };
     return {render};
 });

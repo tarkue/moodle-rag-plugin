@@ -140,3 +140,18 @@ test('caps many elements and unmatched delimiters, preserving the trailing answe
         assert.match(root.textContent, /TAIL$/);
     }
 });
+test('valid citations map to exact source indices while code, links and unknown labels stay literal', () => {
+    const {root, citations} = render('Проект[S1] **(S2)** [S1] [S0] [S3] [S01] (Sx) [[S1]] (S1]\n\n`[S1] (S2)`\n\n```\n[S1]\n```\n\n[(S1)](https://docs.test) [S1](https://docs.test) https://docs.test/(S1)', {sourceCount: 2});
+    assert.deepEqual(Array.from(citations, citation => citation.index), [0, 1, 0]);
+    assert.deepEqual(Array.from(citations, citation => citation.button.textContent), ['[S1]', '(S2)', '[S1]']);
+    assert.equal(root.querySelectorAll('a button, code button, pre button').length, 0);
+    assert.equal(citations[1].button.type, 'button');
+    assert.match(citations[1].button.getAttribute('aria-label'), /S2/);
+    assert.equal(render('[S1]').root.querySelectorAll('.rag-chat__citation').length, 0);
+});
+
+test('adjacent citations remain individually clickable without changing their visible labels', () => {
+    const result = render('[S1][S2] (S1)(S2)', {sourceCount: 2});
+    assert.deepEqual(Array.from(result.citations, citation => citation.index), [0, 1, 0, 1]);
+    assert.equal(result.root.textContent, '[S1][S2] (S1)(S2)');
+});

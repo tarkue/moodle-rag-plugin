@@ -113,6 +113,8 @@ const harness = (responses = [], withVisualViewport = false) => {
             (this.events[type] || []).forEach(listener => listener(emitted));
         }
         focus() { document.activeElement = this; }
+        getBoundingClientRect() { return {top: this.parent && this.parent.dataset.role === 'source-content' ?
+            this.parent.children.indexOf(this) * 200 + 12 : 0}; }
         getClientRects() { return this.hidden ? [] : [{}]; }
         setPointerCapture(id) { this.captured = id; }
         matches(selector) {
@@ -232,7 +234,7 @@ test('sources are above the answer and return preserves input, history and scrol
     assert.equal(h.conversation.hidden, true);
     assert.equal(h.header.hidden, true);
     assert.equal(h.sources.hidden, false);
-    assert.equal(h.sourceContent.children[0].children[0].textContent, '<Учебник>, с. 4');
+    assert.equal(h.sourceContent.children[0].children[0].textContent, 'S1 · <Учебник>, с. 4');
     assert.equal(h.sourceContent.children[0].children[1].textContent, '<script>plain text</script>');
     assert.equal(h.sourceContent.querySelectorAll('a').length, 1);
     assert.equal(h.sourceContent.querySelector('a').rel, 'noopener noreferrer');
@@ -575,4 +577,60 @@ test('source back remeasures3/4-line draft after hidden viewport layout without 
 test('composer template places both send states in their own control row after the textarea', () => {
     const template = fs.readFileSync(__dirname + '/../templates/chat.mustache', 'utf8');
     assert.match(template, /<\/textarea>\s*<div class="rag-chat__controls">\s*<button type="submit"[\s\S]*?data-action="stop"[\s\S]*?<\/div>/);
+});
+test('citation opens exact same-document fragment from its own answer and restores scroll focus and draft', async () => {
+    const h = harness([
+        {ok: true, json: async () => ({answer: 'Проект[S1] и (S2).', sources: [{doc: 'Книга', fragment: 'Первый'}, {doc: 'Книга', fragment: 'Второй'}]})},
+        {ok: true, json: async () => ({answer: 'Другой[S1]', sources: [{doc: 'Другая', fragment: 'Третий'}]})}
+    ]);
+    h.input.value = 'Вопрос'; h.form.dispatch('submit'); await h.settle();
+    const answer = h.messages.children.at(-1);
+    h.input.value = 'Следующий'; h.form.dispatch('submit'); await h.settle();
+    const citation = answer.querySelectorAll('.rag-chat__citation')[1];
+    assert.ok(citation);
+    h.messages.scrollTop = 265;
+    h.input.value = 'Раз\nДва\nТри\nЧетыре'; h.input.scrollHeight = 104; h.input.dispatch('input');
+    h.click(citation);
+    assert.equal(h.sourceContent.children.length, 2);
+    const selected = h.sourceContent.children[1];
+    assert.equal(selected.children[1].textContent, 'Второй');
+    assert.equal(selected.classList.contains('rag-chat__source--selected'), true);
+    assert.equal(h.document.activeElement, selected);
+    assert.equal(h.sourceContent.scrollTop, 200);
+    h.window.events.resize(); h.click(h.actions.back);
+    assert.equal(h.messages.scrollTop, 265);
+    assert.equal(h.document.activeElement, citation);
+    assert.equal(h.input.value, 'Раз\nДва\nТри\nЧетыре');
+    assert.equal(h.input.style.height, '104px');
+    h.click(answer.querySelector('.rag-chat__sources'));
+    assert.equal(h.sourceContent.scrollTop, 0);
+    assert.equal(h.sourceContent.querySelector('.rag-chat__source--selected'), null);
+    h.click(h.actions.back);
+    h.click(answer.querySelector('[data-action=copy-answer]')); await h.settle();
+    assert.equal(h.copied[0], 'Проект[S1] и (S2).');
+});
+test('copy answer retains decorative icon and label through success and failure', async () => {
+    const h = harness([{ok: true, json: async () => ({answer: 'Ответ'})}]);
+    h.input.value = 'Вопрос'; h.form.dispatch('submit'); await h.settle();
+    const button = h.messages.children.at(-1).querySelector('[data-action=copy-answer]');
+    const icon = button.children[0];
+    assert.equal(icon.attributes['aria-hidden'], 'true');
+    assert.equal(button.querySelector('[data-role=copy-label]').textContent, 'Скопировать ответ');
+    h.click(button); await h.settle();
+    assert.equal(button.children[0], icon);
+    assert.equal(button.querySelector('[data-role=copy-label]').textContent, 'Скопировано');
+    h.window.navigator.clipboard.writeText = async () => { throw new Error('denied'); };
+    h.click(button); await h.settle();
+    assert.equal(button.children[0], icon);
+    assert.equal(button.querySelector('[data-role=copy-label]').textContent, 'Не удалось скопировать');
+});
+test('chat icons keep a useful glyph area and decorative copy template without changing text size', () => {
+    for (const name of ['cross', 'arrow-up', 'book', 'ai']) {
+        const svg = fs.readFileSync(__dirname + '/../pix/' + name + '.svg', 'utf8');
+        const box = svg.match(/viewBox="([^"]+)"/)[1].split(/\s+/).map(Number);
+        // These supplied paths occupy about 12 units: oversized 30-unit canvases made them tiny.
+        assert.ok(box[2] <= 20 && box[3] <= 20, name + ' must not retain excessive canvas gutters');
+    }
+    const template = fs.readFileSync(__dirname + '/../templates/chat.mustache', 'utf8');
+    assert.match(template, /data-icon="copy" hidden aria-hidden="true"/);
 });
